@@ -332,6 +332,7 @@ The order to run things:
 
 2. Build the whole domain
    ansible-playbook site.yml
+   
    This runs the full build in the right order: promote dc01 -> join srv01 and
    client01 -> create users -> apply the password policy. It reboots machines
    along the way, so it takes a few minutes. It is safe to run again - anything
@@ -344,8 +345,11 @@ The order to run things:
    ansible-playbook honeypots.yml    (creates the decoy accounts on the DC)
 
 5. Watch the lab live
+
    On the dc01 console, in an admin PowerShell:
+   
    C:\vagrant\scripts\honey-watch.ps1
+   
    Anything that touches a honeypot account shows up in red.
 
 6. After attacking from Kali, see what tripped
@@ -373,13 +377,12 @@ default (P@ssw0rd123!, set at the top of create_users.yml):
    - { first: "Carol", last: "King", password: "Winter2026-lab-pass", groups: ["HR"] }
 
 IMPORTANT - the 16-character rule for users added AFTER the first build:
+
 The domain enforces a 16-character minimum (password_policy.yml). The default
 seed password is only 12 chars - that works during the very first build because
 site.yml applies the policy LAST, after the users exist. But once the lab is
-built the policy is already live, so any NEW user you add must be given a
-password of at least 16 characters and meeting complexity (upper + lower + digit
-+ special), or the create will fail the length rule. Example that satisfies it:
-"Winter2026-lab-pass".
+built the policy is already live, so any NEW user you add must be given a password of at least 16 characters and meeting complexity 
+(upper + lower + digit + special), or the create will fail the length rule. Example that satisfies it: "Winter2026-lab-pass".
 
 IMPORTANT - changing an EXISTING user's password:
 create_users.yml uses update_password: on_create, so just editing 'password' in
