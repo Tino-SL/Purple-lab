@@ -1,0 +1,81 @@
+---
+# Data-driven AD user/group creation. Add people by editing the lists below —
+# re-running only creates what's missing (idempotent).
+domain_dn: "DC=lab,DC=local"
+
+# Organizational Units to create (under the domain root)
+ous:
+  - Employees
+  - Servers
+  - Workstations
+
+# Security groups
+ad_groups:
+  - { name: "IT-Admins",  scope: "global", path: "OU=Employees,{{ domain_dn }}" }
+  - { name: "Developers", scope: "global", path: "OU=Employees,{{ domain_dn }}" }
+  - { name: "HR",         scope: "global", path: "OU=Employees,{{ domain_dn }}" }
+
+# Users. Login/UPN is derived automatically (see create_users.yml):
+#   - with a middle name -> initials  first+middle+last   (e.g. John Q Smith -> jqs)
+#   - no middle name      -> first[0:2] + last[0]          (e.g. Alice Doe    -> ald)
+# UPN becomes <login>@{{ domain_dns_name }}. 'password' is the initial password.
+users:
+  - { first: "John",  middle: "Quincy", last: "Smith",  groups: ["IT-Admins", "Developers"] }
+  - { first: "Alice", last: "Doe",     groups: ["Developers"] }
+  - { first: "Bob",   last: "Miller",  groups: ["HR"] }
+
+# ---------------------------------------------------------------------------
+# HONEYPOTS (see honeypots.yml / honey_detect.yml)
+# Decoy accounts that no real human or service uses. ANY authentication or
+# read against them is suspicious. Each entry can carry:
+#   sam         : the account's sAMAccountName (also its login, UPN prefix)
+#   description : shows in ADUC; use it to plant a honeytoken cred if you want
+#   spn         : if set, the account becomes Kerberoastable (decoy service
+#                 account) — an attacker roasting the domain trips a 4769
+#   password    : the real (strong) password; keep it OFF any wordlist you
+#                 hand your Kali box, or the token is trivially crackable
+#   memberof    : optional groups to make it look privileged (e.g. its name
+#                 says admin but it can be a real weak group in a lab)
+honey_ou: "Service Accounts"
+
+honey_users:
+  # Kerberoastable decoy — the high-signal one. Roasting the domain pulls this.
+  - sam: "svc_sqladmin"
+    description: "SQL Server service account - do not disable"
+    spn: "MSSQLSvc/srv01.lab.local:1433"
+    password: "Zx9#Kq2!vLp7$Rn4"
+
+  # Description-field honeytoken — attackers read descriptions for plaintext pw.
+  - sam: "backup_svc"
+    description: "Backup service. Temp pw during migration: Summer2024! (remove me)"
+    password: "Qm4$Tz8!wRb2#Yn6"
+
+  # Looks like a leftover privileged account — bait for password spraying.
+  - sam: "administrator_old"
+    description: "Former admin account - pending deletion"
+    password: "Hs7!Np3$xKd9#Vc2"
+
+# ---------------------------------------------------------------------------
+# INTENTIONAL VULNERABILITY (see vulns.yml) — OPT-IN, not part of site.yml.
+# The easiest reliable full-domain breach for testing software in a broken lab:
+# a Kerberoastable service account that is ALSO a Domain Admin, whose password
+# is a real rockyou.txt entry. Attack path (any domain user -> Domain Admin):
+#   1. Kerberoast the domain            (GetUserSPNs / nxc --kerberoasting)
+#   2. crack svc_sql's TGS with rockyou (hashcat -m 13100)
+#   3. log in as svc_sql = Domain Admin
+#
+# This is DELIBERATELY distinct from the honeypots above: different account,
+# different SPN port (1434 vs the honey 1433), a genuinely weak password. The
+# domain policy enforces a 16-char minimum, so vulns.yml first applies a
+# Fine-Grained Password Policy (PSO) scoped ONLY to this account to allow the
+# weak password — a realistic misconfiguration, and it leaves the domain-wide
+# policy intact so the detection lab is unaffected.
+vuln_pso_name: "Weak-SvcAccounts-PSO"
+vuln_account:
+  sam: "svc_sql"
+  description: "SQL Server Agent service account"
+  spn: "MSSQLSvc/srv01.lab.local:1434"
+  # A password that exists in rockyou.txt so hashcat cracks it in seconds.
+  password: "Password1"
+  # Membership that makes cracking it == owning the domain.
+  memberof: "Domain Admins"

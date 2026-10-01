@@ -1,0 +1,72 @@
+---
+# Install Sysmon with the SwiftOnSecurity config on all Windows hosts.
+#
+# Sysmon is the low-footprint sensor for this lab: a kernel driver + service
+# (tens of MB RAM, no collector VM) that adds rich telemetry on top of the
+# default Windows Security log — process creation (Event ID 1), network
+# connections (3), image loads (7), etc. — logged to
+#   Applications and Services Logs > Microsoft > Windows > Sysmon > Operational
+#
+# Config: SwiftOnSecurity's sysmonconfig-export.xml — the well-commented,
+# balanced community baseline (the lab/blue-team standard). Re-running this
+# playbook re-applies the config (idempotent-ish; -c always re-reads it).
+- name: Deploy Sysmon (SwiftOnSecurity config) to Windows hosts
+  hosts: windows
+  gather_facts: false
+  vars:
+    sysmon_dir: "C:\\Sysmon"
+    sysmon_zip_url: "https://download.sysinternals.com/files/Sysmon.zip"
+    sysmon_cfg_url: "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml"
+  tasks:
+    - name: Ensure the Sysmon working directory exists
+      ansible.windows.win_file:
+        path: "{{ sysmon_dir }}"
+        state: directory
+
+    - name: Download the Sysmon package
+      ansible.windows.win_get_url:
+        url: "{{ sysmon_zip_url }}"
+        dest: "{{ sysmon_dir }}\\Sysmon.zip"
+        force: false
+
+    - name: Unzip Sysmon
+      community.windows.win_unzip:
+        src: "{{ sysmon_dir }}\\Sysmon.zip"
+        dest: "{{ sysmon_dir }}"
+        creates: "{{ sysmon_dir }}\\Sysmon64.exe"
+
+    - name: Download the SwiftOnSecurity config
+      ansible.windows.win_get_url:
+        url: "{{ sysmon_cfg_url }}"
+        dest: "{{ sysmon_dir }}\\sysmonconfig.xml"
+        force: true
+
+    - name: Check whether the Sysmon service is already installed
+      ansible.windows.win_service_info:
+        name: Sysmon64
+      register: sysmon_svc
+
+    - name: Install Sysmon (first time) with the config
+      ansible.windows.win_shell: >-
+        {{ sysmon_dir }}\Sysmon64.exe -accepteula
+        -i {{ sysmon_dir }}\sysmonconfig.xml
+      when: not sysmon_svc.exists
+      register: sysmon_install
+      changed_when: sysmon_install.rc == 0
+
+    - name: Update Sysmon config (already installed)
+      ansible.windows.win_shell: >-
+        {{ sysmon_dir }}\Sysmon64.exe
+        -c {{ sysmon_dir }}\sysmonconfig.xml
+      when: sysmon_svc.exists
+      register: sysmon_update
+      changed_when: sysmon_update.rc == 0
+
+    - name: Confirm Sysmon is running
+      ansible.windows.win_service_info:
+        name: Sysmon64
+      register: sysmon_check
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: Sysmon64 state={{ sysmon_check.services[0].state | default('NOT INSTALLED') }}"

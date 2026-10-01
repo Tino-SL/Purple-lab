@@ -1,0 +1,132 @@
+---
+# vulns.yml — OPT-IN intentional vulnerability for a breakable test lab.
+#
+#   ansible-playbook vulns.yml            # make the lab breakable
+#   ansible-playbook vulns.yml -e vuln_state=absent   # remove the vuln
+#
+# NOT part of site.yml / bootstrap.sh — you enable brokenness deliberately.
+#
+# Creates a Kerberoastable Domain Admin service account (svc_sql) whose password
+# is a real rockyou.txt entry, so the whole domain falls to:
+#   Kerberoast -> crack with rockyou -> log in as Domain Admin.
+# See the block comment in group_vars/dc.yml for the full rationale.
+#
+# The domain enforces a 16-char password minimum, so we scope a Fine-Grained
+# Password Policy (PSO) to ONLY this account to permit the weak password. The
+# domain-wide policy (and the detection lab) are left untouched.
+- name: Deploy intentional vulnerability (Kerberoastable DA service account)
+  hosts: dc
+  gather_facts: false
+  vars:
+    vuln_state: present          # 'present' = breakable, 'absent' = clean it up
+    vuln_temp_password: "TempStrongP@ssw0rd!2026"   # satisfies domain policy at create-time
+  tasks:
+
+    # ---------------- teardown path ----------------
+    - name: Remove the vuln account (vuln_state=absent)
+      microsoft.ad.user:
+        identity: "{{ vuln_account.sam }}"
+        state: absent
+      when: vuln_state == 'absent'
+
+    - name: Remove the weak-password PSO (vuln_state=absent)
+      ansible.windows.win_shell: |
+        $p = Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '{{ vuln_pso_name }}'" -ErrorAction SilentlyContinue
+        if ($p) { Remove-ADFineGrainedPasswordPolicy -Identity "{{ vuln_pso_name }}" -Confirm:$false; "removed PSO" }
+        else { "no PSO to remove" }
+      register: pso_rm
+      changed_when: "'removed PSO' in pso_rm.stdout"
+      when: vuln_state == 'absent'
+
+    - name: Stop here if we were tearing down
+      ansible.builtin.meta: end_play
+      when: vuln_state == 'absent'
+
+    # ---------------- build path ----------------
+    # Create the account with a STRONG temp password first, so the create
+    # succeeds under the 16-char domain policy. We weaken it after the PSO.
+    - name: Create the vuln service account (Kerberoastable via SPN)
+      microsoft.ad.user:
+        name: "{{ vuln_account.sam }}"
+        sam_account_name: "{{ vuln_account.sam }}"
+        description: "{{ vuln_account.description }}"
+        password: "{{ vuln_temp_password }}"
+        update_password: on_create
+        path: "CN=Users,{{ domain_dn }}"
+        upn: "{{ vuln_account.sam }}@{{ domain_dns_name }}"
+        spn:
+          set:
+            - "{{ vuln_account.spn }}"
+        password_never_expires: true
+        enabled: true
+        state: present
+
+    # Fine-Grained Password Policy that permits weak passwords, scoped ONLY to
+    # this account. Precedence 1 so it wins over the Default Domain Policy.
+    - name: Create a permissive PSO for the vuln account
+      ansible.windows.win_shell: |
+        $existing = Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '{{ vuln_pso_name }}'" -ErrorAction SilentlyContinue
+        if (-not $existing) {
+          New-ADFineGrainedPasswordPolicy -Name "{{ vuln_pso_name }}" `
+            -Precedence 1 `
+            -MinPasswordLength 4 `
+            -ComplexityEnabled $false `
+            -PasswordHistoryCount 0 `
+            -MinPasswordAge (New-TimeSpan -Days 0) `
+            -MaxPasswordAge (New-TimeSpan -Days 0) `
+            -ReversibleEncryptionEnabled $false
+          "created PSO"
+        } else { "PSO already exists" }
+      register: pso_new
+      changed_when: "'created PSO' in pso_new.stdout"
+
+    - name: Scope the PSO to the vuln account
+      ansible.windows.win_shell: |
+        $subjects = (Get-ADFineGrainedPasswordPolicy -Identity "{{ vuln_pso_name }}").AppliesTo
+        $me = (Get-ADUser -Identity "{{ vuln_account.sam }}").DistinguishedName
+        if ($subjects -notcontains $me) {
+          Add-ADFineGrainedPasswordPolicySubject -Identity "{{ vuln_pso_name }}" -Subjects "{{ vuln_account.sam }}"
+          "scoped PSO"
+        } else { "PSO already scoped" }
+      register: pso_scope
+      changed_when: "'scoped PSO' in pso_scope.stdout"
+
+    # Now the weak password is allowed by the PSO — set it. Idempotency: only
+    # set it if the account can't already authenticate with the weak password.
+    - name: Set the weak (rockyou) password on the vuln account
+      ansible.windows.win_shell: |
+        $sec = ConvertTo-SecureString "{{ vuln_account.password }}" -AsPlainText -Force
+        Set-ADAccountPassword -Identity "{{ vuln_account.sam }}" -Reset -NewPassword $sec
+        Set-ADUser -Identity "{{ vuln_account.sam }}" -PasswordNeverExpires $true
+        "weak password set"
+      register: weakpw
+      changed_when: "'weak password set' in weakpw.stdout"
+
+    - name: Make the vuln account a Domain Admin
+      microsoft.ad.group:
+        name: "{{ vuln_account.memberof }}"
+        members:
+          add:
+            - "{{ vuln_account.sam }}"
+        state: present
+
+    # Force RC4 (etype 23) Kerberos tickets for this account. RC4 Kerberoast
+    # hashes ($krb5tgs$23$) crack on CPU with John in seconds — no GPU needed —
+    # making the breach reliable on any host. An encryption downgrade like this
+    # is also a genuine real-world weakness. (0x4 = RC4_HMAC only.)
+    - name: Downgrade the vuln account to RC4 Kerberos encryption
+      ansible.windows.win_shell: |
+        Set-ADUser -Identity "{{ vuln_account.sam }}" -Replace @{ 'msDS-SupportedEncryptionTypes' = 4 }
+        "rc4 set"
+      register: rc4
+      changed_when: "'rc4 set' in rc4.stdout"
+
+    - name: Report the planted vulnerability
+      ansible.builtin.debug:
+        msg:
+          - "VULN PLANTED — the lab is now breakable."
+          - "Account : {{ vuln_account.sam }}@{{ domain_dns_name }} (member of {{ vuln_account.memberof }})"
+          - "SPN     : {{ vuln_account.spn }}  (Kerberoastable)"
+          - "Password: {{ vuln_account.password }}  (in rockyou.txt)"
+          - "Breach  : Kerberoast -> crack with rockyou -> Domain Admin."
+          - "Remove  : ansible-playbook vulns.yml -e vuln_state=absent"

@@ -1,0 +1,10 @@
+---
+# Full lab build in dependency order:
+#   1. promote dc01  ->  2. join members  ->  3. populate AD  ->  4. password policy
+# Password policy runs LAST on purpose: it enforces a 16-char minimum, and the
+# users are seeded with a shorter initial password. Applying it before user
+# creation would make the create fail the length rule.
+- import_playbook: promote_dc.yml
+- import_playbook: join_domain.yml
+- import_playbook: create_users.yml
+- import_playbook: password_policy.yml

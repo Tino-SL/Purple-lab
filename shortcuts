@@ -1,0 +1,3 @@
+#command for making vagrant log.files
+
+VAGRANT_LOG=debug vagrant up [insert name] 2>&1 | tee vagrant-debug.log

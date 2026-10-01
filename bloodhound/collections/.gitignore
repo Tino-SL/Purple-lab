@@ -1,0 +1,4 @@
+# Collected BloodHound zips — data, not source. Keep the dir, ignore contents.
+*.zip
+*.json
+!.gitignore

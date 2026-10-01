@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Purple Lab — Overview</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c2230;
+    --border: #2b3240;
+    --ink: #e6edf3;
+    --muted: #8b949e;
+    --faint: #5c6570;
+    --accent: #a371f7;      /* purple — the lab's namesake */
+    --accent-dim: #6f42c1;
+    --red: #f85149;
+    --green: #3fb950;
+    --amber: #d29922;
+    --blue: #58a6ff;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 4rem;
+  }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: var(--mono); }
+
+  /* ---------- masthead ---------- */
+  header {
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #12161d, var(--bg));
+    padding: 2.2rem 2rem 1.8rem;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 2rem; }
+  header .wrap { padding: 0; }
+  .brand { display: flex; align-items: baseline; gap: 0.9rem; flex-wrap: wrap; }
+  .brand h1 {
+    font-size: 1.9rem; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .brand h1 .dot { color: var(--accent); }
+  .brand .tag {
+    font-family: var(--mono); font-size: 0.72rem; color: var(--accent);
+    border: 1px solid var(--accent-dim); border-radius: 999px;
+    padding: 0.15rem 0.6rem; text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  header p.lede {
+    color: var(--muted); margin-top: 0.7rem; max-width: 60ch; font-size: 0.98rem;
+  }
+  .statline {
+    display: flex; gap: 1.8rem; margin-top: 1.4rem; flex-wrap: wrap;
+    font-size: 0.8rem;
+  }
+  .statline div { display: flex; flex-direction: column; }
+  .statline .k { color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.68rem; }
+  .statline .v { color: var(--ink); font-family: var(--mono); font-size: 0.95rem; margin-top: 0.15rem; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(14,17,22,0.9); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .wrap { display: flex; gap: 0.4rem; padding: 0.5rem 2rem; overflow-x: auto; }
+  nav a {
+    color: var(--muted); font-size: 0.82rem; padding: 0.35rem 0.7rem;
+    border-radius: 6px; white-space: nowrap;
+  }
+  nav a:hover { color: var(--ink); background: var(--panel-2); text-decoration: none; }
+
+  /* ---------- sections ---------- */
+  section { padding-top: 2.6rem; }
+  h2 {
+    font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--accent); font-weight: 600; margin-bottom: 1.1rem;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  h2::before {
+    content: ""; width: 6px; height: 6px; background: var(--accent);
+    border-radius: 2px; transform: rotate(45deg); display: inline-block;
+  }
+
+  /* ---------- topology ---------- */
+  .topo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.9rem; }
+  .node {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem; position: relative; overflow: hidden;
+  }
+  .node .role { font-size: 0.7rem; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
+  .node .name { font-family: var(--mono); font-size: 1.15rem; font-weight: 600; margin-top: 0.15rem; }
+  .node .ip { font-family: var(--mono); font-size: 0.85rem; color: var(--blue); margin-top: 0.5rem; }
+  .node .os { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
+  .node.dc { border-color: var(--accent-dim); }
+  .node.dc .name { color: var(--accent); }
+  .node.attacker { border-color: #5a2d2d; }
+  .node.attacker .name { color: var(--red); }
+  .subnet {
+    margin-top: 0.9rem; font-family: var(--mono); font-size: 0.8rem; color: var(--muted);
+    text-align: center; border: 1px dashed var(--border); border-radius: 8px; padding: 0.5rem;
+  }
+
+  /* ---------- cards grid ---------- */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.9rem; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.2rem;
+  }
+  .card h3 { font-size: 0.95rem; margin-bottom: 0.3rem; }
+  .card p { font-size: 0.85rem; color: var(--muted); }
+  .card .stack { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.55rem; }
+  .pill {
+    font-family: var(--mono); font-size: 0.68rem; padding: 0.1rem 0.5rem; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .pill.on { color: var(--green); border-color: #234d2e; background: #10241722; }
+  .pill.opt { color: var(--amber); border-color: #4d3f1e; }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .tablewrap { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); }
+  th { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td.mono, td .mono { font-family: var(--mono); }
+  .cred { color: var(--amber); }
+  .group-row td { background: var(--panel-2); color: var(--muted); font-size: 0.7rem;
+    text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  .warn { color: var(--red); }
+  .note { color: var(--faint); font-size: 0.78rem; }
+
+  /* ---------- attack chain ---------- */
+  .chain { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; align-items: stretch; }
+  .step {
+    background: var(--panel); border: 1px solid var(--border); padding: 1rem 1.1rem; position: relative;
+  }
+  .step:first-child { border-radius: 10px 0 0 10px; }
+  .step:last-child { border-radius: 0 10px 10px 0; border-left: none; }
+  .step:not(:first-child):not(:last-child) { border-left: none; }
+  .step .num { font-family: var(--mono); font-size: 0.72rem; color: var(--accent); }
+  .step h4 { font-size: 0.95rem; margin: 0.25rem 0 0.4rem; }
+  .step p { font-size: 0.8rem; color: var(--muted); }
+  .step .cmd { font-family: var(--mono); font-size: 0.72rem; color: var(--faint); margin-top: 0.55rem; word-break: break-all; }
+  .step::after {
+    content: "\2192"; position: absolute; right: -0.7rem; top: 50%; transform: translateY(-50%);
+    color: var(--accent); z-index: 2; font-size: 1rem; background: var(--bg); padding: 0 0.1rem;
+  }
+  .step:last-child::after { content: none; }
+
+  /* ---------- command blocks ---------- */
+  .cmdblock {
+    background: #0a0d12; border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.2rem; font-family: var(--mono); font-size: 0.8rem; overflow-x: auto;
+  }
+  .cmdblock .c { color: var(--green); }
+  .cmdblock .comment { color: var(--faint); }
+  .cmdblock .path { color: var(--blue); }
+  .cmdblock + .cmdblock { margin-top: 0.7rem; }
+  .cmdgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+  .cmdgrid h3 { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.5rem; font-weight: 600; }
+
+  footer {
+    margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1.2rem;
+    color: var(--faint); font-size: 0.78rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+  }
+
+  @media (max-width: 860px) {
+    .topo, .grid-3, .grid-2, .chain, .cmdgrid { grid-template-columns: 1fr; }
+    .step { border-radius: 10px !important; border-left: 1px solid var(--border) !important; }
+    .step::after { content: none; }
+    .wrap { padding: 0 1.2rem; }
+    header { padding: 1.6rem 1.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <h1>Purple Lab<span class="dot">.</span></h1>
+      <span class="tag">Active Directory Test Range</span>
+    </div>
+    <p class="lede">A self-contained Active Directory lab that simulates a small company — domain
+      controller, member server, client, and a Kali attacker box. Build it, break it, detect it,
+      and test tooling against it without touching anything real.</p>
+    <div class="statline">
+      <div><span class="k">Domain</span><span class="v">lab.local</span></div>
+      <div><span class="k">Subnet</span><span class="v">192.168.100.0/24</span></div>
+      <div><span class="k">Machines</span><span class="v">4</span></div>
+      <div><span class="k">Provisioning</span><span class="v">Vagrant + Ansible</span></div>
+      <div><span class="k">One-liner</span><span class="v">./bootstrap.sh</span></div>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <div class="wrap">
+    <a href="#topology">Topology</a>
+    <a href="#stack">Stack</a>
+    <a href="#capabilities">Capabilities</a>
+    <a href="#credentials">Credentials</a>
+    <a href="#breach">The Breach</a>
+    <a href="#commands">Commands</a>
+    <a href="#requirements">Requirements</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <section id="topology">
+    <h2>Network Topology</h2>
+    <div class="topo">
+      <div class="node dc">
+        <div class="role">Domain Controller · DNS</div>
+        <div class="name">dc01</div>
+        <div class="ip">192.168.100.10</div>
+        <div class="os">Windows Server 2025</div>
+      </div>
+      <div class="node">
+        <div class="role">Member Server</div>
+        <div class="name">srv01</div>
+        <div class="ip">192.168.100.20</div>
+        <div class="os">Windows Server 2025</div>
+      </div>
+      <div class="node">
+        <div class="role">Member Client</div>
+        <div class="name">client01</div>
+        <div class="ip">192.168.100.30</div>
+        <div class="os">Windows 11</div>
+      </div>
+      <div class="node attacker">
+        <div class="role">Attacker</div>
+        <div class="name">kali1</div>
+        <div class="ip">192.168.100.40</div>
+        <div class="os">Kali Linux (rolling)</div>
+      </div>
+    </div>
+    <div class="subnet">all hosts on private network 192.168.100.0/24 &nbsp;·&nbsp; dc01 is the DNS server for lab.local (NetBIOS: LAB)</div>
+  </section>
+
+  <section id="stack">
+    <h2>Toolchain</h2>
+    <div class="grid-3">
+      <div class="card">
+        <h3>VMware + Vagrant</h3>
+        <p>Vagrant defines and boots the four VMs on the VMware provider. Boxes are pulled
+           automatically — no manual image downloads.</p>
+      </div>
+      <div class="card">
+        <h3>Ansible</h3>
+        <p>Turns the empty VMs into a real domain over WinRM: promote the DC, join members,
+           create users, apply the password policy, deploy monitoring.</p>
+      </div>
+      <div class="card">
+        <h3>Docker</h3>
+        <p>Runs BloodHound CE (web app + Postgres + Neo4j) and a NetExec-based collector
+           container that maps the domain's attack paths.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="capabilities">
+    <h2>What the Lab Does</h2>
+    <div class="grid-2">
+      <div class="card">
+        <div class="stack"><h3>Domain simulation</h3><span class="pill on">core</span></div>
+        <p>A working AD forest with OUs, security groups, and realistic users — logins derived
+           automatically from each person's name.</p>
+      </div>
+      <div class="card">
+        <div class="stack"><h3>Detection (blue)</h3><span class="pill on">Sysmon + honeypots</span></div>
+        <p>Sysmon on every host plus honeypot decoy accounts with a SACL tripwire. Kerberoast,
+           spray, and recon all raise events that <code>honey_detect.yml</code> hunts.</p>
+      </div>
+      <div class="card">
+        <div class="stack"><h3>Attack surface (red)</h3><span class="pill opt">opt-in vuln</span></div>
+        <p><code>vulns.yml</code> plants a deliberately breakable path to Domain Admin. Toggle it
+           on for exploit practice, off to return to a clean lab.</p>
+      </div>
+      <div class="card">
+        <div class="stack"><h3>Attack-path mapping</h3><span class="pill on">BloodHound CE</span></div>
+        <p>Dockerized BloodHound with a container collector. LDAPS is auto-enabled on the DC so
+           collection works against the signing-enforced Server 2025.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="credentials">
+    <h2>Credentials</h2>
+    <p class="note" style="margin-bottom:0.9rem;">Isolated lab — passwords are simple on purpose. Full list also lives in README Section 3.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Account</th><th>Password</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr class="group-row"><td colspan="3">Access / Logins</td></tr>
+          <tr><td class="mono">vagrant / WinRM</td><td class="mono cred">vagrant</td><td class="note">local + provisioning</td></tr>
+          <tr><td class="mono">vagrant@lab.local</td><td class="mono cred">vagrant</td><td class="note">Domain Admin</td></tr>
+          <tr><td class="mono">DSRM (safe mode)</td><td class="mono cred">Password123!</td><td class="note">directory recovery</td></tr>
+          <tr><td class="mono">Kali console</td><td class="mono cred">vagrant</td><td class="note">attacker box</td></tr>
+
+          <tr class="group-row"><td colspan="3">Domain Users</td></tr>
+          <tr><td class="mono">jqs · John Quincy Smith</td><td class="mono cred">P@ssw0rd123!</td><td class="note">IT-Admins, Developers</td></tr>
+          <tr><td class="mono">ald · Alice Doe</td><td class="mono cred">P@ssw0rd123!</td><td class="note">Developers</td></tr>
+          <tr><td class="mono">bom · Bob Miller</td><td class="mono cred">P@ssw0rd123!</td><td class="note">HR</td></tr>
+
+          <tr class="group-row"><td colspan="3">BloodHound CE &nbsp;·&nbsp; http://127.0.0.1:8080</td></tr>
+          <tr><td class="mono">admin</td><td class="mono cred">Password123!</td><td class="note">web UI</td></tr>
+
+          <tr class="group-row"><td colspan="3">Honeypot Decoys — strong pw, NOT meant to be cracked</td></tr>
+          <tr><td class="mono">svc_sqladmin</td><td class="mono cred">Zx9#Kq2!vLp7$Rn4</td><td class="note">Kerberoastable tripwire (SPN :1433)</td></tr>
+          <tr><td class="mono">backup_svc</td><td class="mono cred">Qm4$Tz8!wRb2#Yn6</td><td class="note">description honeytoken</td></tr>
+          <tr><td class="mono">administrator_old</td><td class="mono cred">Hs7!Np3$xKd9#Vc2</td><td class="note">spray bait</td></tr>
+
+          <tr class="group-row"><td colspan="3">Intentional Vuln — only after <code>vulns.yml</code></td></tr>
+          <tr><td class="mono warn">svc_sql</td><td class="mono cred">Password1</td><td class="note warn">Domain Admin · weak · in rockyou.txt</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="breach">
+    <h2>The Breach &nbsp;<span style="color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0;font-size:0.75rem;">(opt-in, after <code>ansible-playbook vulns.yml</code>)</span></h2>
+    <div class="chain">
+      <div class="step">
+        <div class="num">STEP 01</div>
+        <h4>Kerberoast</h4>
+        <p>Request the TGS for <code>svc_sql</code> with any domain credential. The account is
+           RC4-downgraded, so the hash cracks on CPU.</p>
+        <div class="cmd">impacket-GetUserSPNs lab.local/vagrant:vagrant -dc-ip 192.168.100.10 -request-user svc_sql</div>
+      </div>
+      <div class="step">
+        <div class="num">STEP 02</div>
+        <h4>Crack offline</h4>
+        <p>The password lives in rockyou.txt, so John recovers <code>Password1</code> in under a
+           second — no GPU needed.</p>
+        <div class="cmd">john --wordlist=/usr/share/wordlists/rockyou.txt hash.txt</div>
+      </div>
+      <div class="step">
+        <div class="num">STEP 03</div>
+        <h4>Domain Admin</h4>
+        <p><code>svc_sql</code> is in Domain Admins — the cracked password is full domain
+           compromise (verified via DCSync of krbtgt).</p>
+        <div class="cmd">nxc smb 192.168.100.10 -u svc_sql -p Password1</div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:0.8rem;">This path is deliberately loud — the Kerberoast trips a 4769 the honeypot sensor catches, so it doubles as an exercise for the detection side.</p>
+  </section>
+
+  <section id="commands">
+    <h2>Command Reference</h2>
+    <div class="cmdgrid">
+      <div>
+        <h3>Bring the whole lab up</h3>
+        <div class="cmdblock">
+          <span class="comment"># one-liner: VMs + domain + monitoring + LDAPS</span><br>
+          <span class="c">./vagrant-project/bootstrap.sh</span><br><br>
+          <span class="comment"># flags</span><br>
+          <span class="c">./bootstrap.sh --no-kali</span><br>
+          <span class="c">./bootstrap.sh --no-monitoring</span><br>
+          <span class="c">./bootstrap.sh --ansible</span> <span class="comment"># playbooks only</span>
+        </div>
+      </div>
+      <div>
+        <h3>Vagrant · <span class="path">./vagrant-project/</span></h3>
+        <div class="cmdblock">
+          <span class="c">vagrant up</span> <span class="comment"># all machines</span><br>
+          <span class="c">vagrant status</span><br>
+          <span class="c">vagrant halt</span> <span class="comment"># stop cleanly</span><br>
+          <span class="c">vagrant reload kali1</span><br>
+          <span class="c">vagrant ssh kali1</span>
+        </div>
+      </div>
+      <div>
+        <h3>Ansible · <span class="path">./ansible/</span></h3>
+        <div class="cmdblock">
+          <span class="c">ansible-playbook ping.yml</span> <span class="comment"># test WinRM</span><br>
+          <span class="c">ansible-playbook site.yml</span> <span class="comment"># build domain</span><br>
+          <span class="c">ansible-playbook sysmon.yml</span><br>
+          <span class="c">ansible-playbook honeypots.yml</span><br>
+          <span class="c">ansible-playbook honey_detect.yml</span> <span class="comment"># hunt</span><br>
+          <span class="c">ansible-playbook enable_ldaps.yml</span>
+        </div>
+      </div>
+      <div>
+        <h3>Vuln toggle + BloodHound</h3>
+        <div class="cmdblock">
+          <span class="comment"># make it breakable / clean up</span><br>
+          <span class="c">ansible-playbook vulns.yml</span><br>
+          <span class="c">ansible-playbook vulns.yml -e vuln_state=absent</span><br><br>
+          <span class="comment"># bloodhound · ./bloodhound/</span><br>
+          <span class="c">docker compose up -d</span><br>
+          <span class="c">./collect.sh</span><br>
+          <span class="c">BH_ADMIN_PASS=Password123! ./ingest.sh</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="requirements">
+    <h2>Requirements &amp; Platforms</h2>
+    <div class="grid-2">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Resource</th><th>Minimum</th></tr></thead>
+          <tbody>
+            <tr><td>CPU</td><td class="note">i5-1135G7 / Ryzen 5 4600H (6c/12t)</td></tr>
+            <tr><td>RAM</td><td class="mono">30 GB <span class="note">(lab uses ~18)</span></td></tr>
+            <tr><td>Disk</td><td class="mono">150 GB <span class="note">(~76 VMs + ~60 boxes)</span></td></tr>
+            <tr><td>First build</td><td class="note">~30–40 min</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Platform</th><th>Support</th></tr></thead>
+          <tbody>
+            <tr><td>Linux</td><td><span class="pill on">Yes — recommended</span></td></tr>
+            <tr><td>Windows</td><td><span class="pill opt">Yes — Ansible via WSL2</span></td></tr>
+            <tr><td>macOS</td><td><span class="pill" style="color:var(--red);border-color:#5a2d2d;">None</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Purple Lab · Active Directory test range · lab.local</span>
+    <span>Full docs in README.md · isolated / evaluation-edition Windows images</span>
+  </footer>
+
+</main>
+</body>
+</html>

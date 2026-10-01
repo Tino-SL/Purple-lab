@@ -1,0 +1,12 @@
+---
+# Lab-wide variables (plaintext creds are fine here — isolated lab only)
+domain_dns_name: lab.local
+domain_netbios: LAB
+dc_ip: 192.168.100.10
+
+# DSRM / Safe Mode recovery password (from dc01-AD.ps1)
+safe_mode_password: "Password123!"
+
+# Domain admin used to join members (local 'vagrant' becomes LAB\vagrant after promotion)
+domain_admin_user: "vagrant@lab.local"
+domain_admin_password: "vagrant"

@@ -1,0 +1,113 @@
+---
+# Deploy AD honeypots on lab.local. Runs on the DC.
+#
+# A honeypot is only useful if it ALERTS, so this playbook builds both halves:
+#   1. the BAIT   — decoy accounts (honey_users in group_vars/dc.yml), one of
+#                   them Kerberoastable via a fake SPN, honeytokens in the
+#                   description field.
+#   2. the SENSOR — Advanced Audit Policy so authentication + directory reads
+#                   are logged, plus a SACL on each honey object so even
+#                   READING it raises a 4662.
+#
+# Hunt the resulting events with honey_detect.yml.
+#
+# Events these honeypots generate (Security log on the DC):
+#   4768  Kerberos TGT requested            (any auth as a honey account)
+#   4769  Kerberos service ticket requested (KERBEROAST of the SPN decoy)
+#   4771  Kerberos pre-auth failed          (bad-password spray)
+#   4624  successful logon / 4625 failed logon
+#   4662  directory object accessed         (recon reading the honey object)
+- name: Deploy AD honeypots
+  hosts: dc
+  gather_facts: false
+  tasks:
+    - name: Create the honeypot OU (blends in as service accounts)
+      microsoft.ad.ou:
+        name: "{{ honey_ou }}"
+        path: "{{ domain_dn }}"
+        state: present
+
+    - name: Create honey accounts
+      microsoft.ad.user:
+        name: "{{ item.sam }}"
+        sam_account_name: "{{ item.sam }}"
+        description: "{{ item.description | default(omit) }}"
+        password: "{{ item.password }}"
+        update_password: on_create
+        path: "OU={{ honey_ou }},{{ domain_dn }}"
+        upn: "{{ item.sam }}@{{ domain_dns_name }}"
+        spn:
+          set: "{{ [item.spn] if item.spn is defined else omit }}"
+        password_never_expires: true
+        # Kerberoast needs the account enabled; keep them all live as bait.
+        enabled: true
+        state: present
+      loop: "{{ honey_users }}"
+      loop_control:
+        label: "{{ item.sam }}{{ ' (kerberoastable)' if item.spn is defined else '' }}"
+
+    - name: Optional group membership for privileged-looking bait
+      microsoft.ad.group:
+        name: "{{ item.1 }}"
+        members:
+          add:
+            - "{{ item.0.sam }}"
+        state: present
+      loop: "{{ honey_users | subelements('memberof', skip_missing=true) }}"
+      loop_control:
+        label: "{{ item.0.sam }} -> {{ item.1 }}"
+
+    # ----- SENSOR: turn on the audit categories the bait relies on -----
+    - name: Enable Advanced Audit Policy (Kerberos, Logon, DS Access)
+      ansible.windows.win_shell: |
+        auditpol /set /subcategory:"Kerberos Service Ticket Operations" /success:enable /failure:enable
+        auditpol /set /subcategory:"Kerberos Authentication Service"    /success:enable /failure:enable
+        auditpol /set /subcategory:"Logon"                              /success:enable /failure:enable
+        auditpol /set /subcategory:"Directory Service Access"           /success:enable /failure:enable
+      register: auditset
+      changed_when: auditset.rc == 0
+
+    # ----- SENSOR: SACL each honey object so a mere READ logs a 4662 -----
+    # NOTE: we use a raw DirectoryEntry with the SACL SecurityMask and
+    # CommitChanges() — NOT Get-Acl/Set-Acl on the AD: provider. Set-Acl has
+    # no -Audit parameter on the AD provider, so the SACL write silently
+    # fails there. ReadProperty+ListChildren+ListObject is what an LDAP read
+    # of the object checks against, so recon actually raises a 4662.
+    - name: Add a read-audit SACL (Everyone) to each honey object so recon logs 4662
+      ansible.windows.win_shell: |
+        $ErrorActionPreference = 'Stop'
+        $sid = New-Object System.Security.Principal.SecurityIdentifier("S-1-1-0")  # Everyone
+        $rights = [System.DirectoryServices.ActiveDirectoryRights]::ReadProperty -bor `
+                  [System.DirectoryServices.ActiveDirectoryRights]::ListChildren -bor `
+                  [System.DirectoryServices.ActiveDirectoryRights]::ListObject
+        $dn = "LDAP://CN={{ item.sam }},OU={{ honey_ou }},{{ domain_dn }}"
+        $de = New-Object System.DirectoryServices.DirectoryEntry($dn)
+        $de.psbase.Options.SecurityMasks = [System.DirectoryServices.SecurityMasks]::Sacl
+        $sec = $de.psbase.ObjectSecurity
+        $existing = $sec.GetAuditRules($true,$false,[System.Security.Principal.SecurityIdentifier]) |
+                    Where-Object { $_.IdentityReference -eq $sid -and $_.ActiveDirectoryRights -eq $rights }
+        if (-not $existing) {
+          # drop any stale Everyone audit rules, then add the correct read-audit ACE
+          $sec.GetAuditRules($true,$false,[System.Security.Principal.SecurityIdentifier]) |
+            Where-Object { $_.IdentityReference -eq $sid } |
+            ForEach-Object { [void]$sec.RemoveAuditRule($_) }
+          $rule = New-Object System.DirectoryServices.ActiveDirectoryAuditRule(
+                    $sid, $rights, [System.Security.AccessControl.AuditFlags]::Success)
+          $sec.AddAuditRule($rule)
+          $de.psbase.CommitChanges()
+          "added SACL to {{ item.sam }}"
+        } else { "SACL already present on {{ item.sam }}" }
+      register: sacl
+      changed_when: "'added SACL' in sacl.stdout"
+      loop: "{{ honey_users }}"
+      loop_control:
+        label: "{{ item.sam }}"
+
+    - name: Report deployed honeypots
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.sam }}@{{ domain_dns_name }}
+          {{ '[KERBEROASTABLE ' ~ item.spn ~ ']' if item.spn is defined else '' }}
+      loop: "{{ honey_users }}"
+      loop_control:
+        label: "{{ item.sam }}"

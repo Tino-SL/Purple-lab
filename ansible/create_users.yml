@@ -1,0 +1,63 @@
+---
+# Build AD structure: OUs, groups, users. Runs on the DC.
+- name: Populate the domain with OUs, groups and users
+  hosts: dc
+  gather_facts: false
+  vars:
+    default_user_password: "P@ssw0rd123!"
+    # Login-name rule (lowercase):
+    #   - has a middle name -> initials: first + middle + last  (3 letters)
+    #   - no middle name    -> 2 letters of first + 1 of last   (3 letters)
+    # UPN suffix is the domain ({{ domain_dns_name }}, e.g. lab.local).
+    user_login: >-
+      {{ (
+           (item.first[0] ~ item.middle[0] ~ item.last[0])
+           if (item.middle is defined and item.middle | length > 0)
+           else (item.first[0:2] ~ item.last[0])
+         ) | lower }}
+  tasks:
+    - name: Create Organizational Units
+      microsoft.ad.ou:
+        name: "{{ item }}"
+        path: "{{ domain_dn }}"
+        state: present
+      loop: "{{ ous }}"
+
+    - name: Create security groups
+      microsoft.ad.group:
+        name: "{{ item.name }}"
+        scope: "{{ item.scope }}"
+        path: "{{ item.path }}"
+        state: present
+      loop: "{{ ad_groups }}"
+
+    - name: Create users
+      microsoft.ad.user:
+        name: "{{ user_login }}"
+        sam_account_name: "{{ user_login }}"
+        firstname: "{{ item.first }}"
+        surname: "{{ item.last }}"
+        password: "{{ item.password | default(default_user_password) }}"
+        update_password: on_create
+        path: "OU=Employees,{{ domain_dn }}"
+        upn: "{{ user_login }}@{{ domain_dns_name }}"
+        password_never_expires: true
+        state: present
+      loop: "{{ users }}"
+      loop_control:
+        label: "{{ item.first }} {{ item.last }} -> {{ user_login }}"
+
+    - name: Add users to their groups
+      microsoft.ad.group:
+        name: "{{ item.1 }}"
+        scope: global
+        path: "OU=Employees,{{ domain_dn }}"
+        members:
+          add:
+            - "{{ ( (item.0.first[0] ~ item.0.middle[0] ~ item.0.last[0])
+                    if (item.0.middle is defined and item.0.middle | length > 0)
+                    else (item.0.first[0:2] ~ item.0.last[0]) ) | lower }}"
+        state: present
+      loop: "{{ users | subelements('groups') }}"
+      loop_control:
+        label: "{{ item.0.first }} {{ item.0.last }} -> {{ item.1 }}"

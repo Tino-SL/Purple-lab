@@ -1,0 +1,31 @@
+---
+# Join srv01 + client01 to lab.local. Mirrors dcjoin.ps1, idempotent.
+# Members authenticate to WinRM as the LOCAL 'vagrant' account until they join.
+- name: Join members to the domain
+  hosts: members
+  gather_facts: false
+  tasks:
+    - name: Point the lab NIC's DNS at the DC (leave NAT adapter alone)
+      ansible.windows.win_shell: |
+        $if = Get-NetIPAddress -AddressFamily IPv4 |
+          Where-Object { $_.IPAddress -like "192.168.100.*" } |
+          Select-Object -First 1
+        if ($if) {
+          Set-DnsClientServerAddress -InterfaceIndex $if.InterfaceIndex -ServerAddresses "{{ dc_ip }}"
+          "set DNS on ifIndex $($if.InterfaceIndex)"
+        } else { "no lab NIC found"; exit 1 }
+      register: dnsset
+      changed_when: "'set DNS' in dnsset.stdout"
+
+    - name: Join the domain (reboots on change)
+      microsoft.ad.membership:
+        dns_domain_name: "{{ domain_dns_name }}"
+        domain_admin_user: "{{ domain_admin_user }}"
+        domain_admin_password: "{{ domain_admin_password }}"
+        state: domain
+        reboot: true
+      register: joined
+
+    - name: Report membership state
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} changed={{ joined.changed }} reboot_required={{ joined.reboot_required | default(false) }}"

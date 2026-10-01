@@ -1,0 +1,39 @@
+---
+# Promote dc01 into the first DC of a new forest (lab.local).
+# Mirrors dc01-AD.ps1 but idempotent and Ansible-managed.
+- name: Promote dc01 to domain controller
+  hosts: dc
+  gather_facts: false
+  tasks:
+    - name: Install AD Domain Services + management tools
+      ansible.windows.win_feature:
+        name:
+          - AD-Domain-Services
+        include_management_tools: true
+      register: ad_feature
+
+    - name: Reboot if the feature install requires it
+      ansible.windows.win_reboot:
+      when: ad_feature.reboot_required
+
+    - name: Create the new forest / promote to DC
+      microsoft.ad.domain:
+        dns_domain_name: "{{ domain_dns_name }}"
+        domain_netbios_name: "{{ domain_netbios }}"
+        safe_mode_password: "{{ safe_mode_password }}"
+        install_dns: true
+        reboot: true          # module handles the promotion reboot + WinRM reconnect
+      register: promote
+
+    - name: Wait for AD Web Services / DC to be fully up
+      ansible.windows.win_shell: |
+        Get-ADDomain -ErrorAction Stop | Select-Object -ExpandProperty DNSRoot
+      register: addomain
+      retries: 30
+      delay: 15
+      until: addomain.rc == 0
+      changed_when: false
+
+    - name: Show promoted domain
+      ansible.builtin.debug:
+        var: addomain.stdout_lines

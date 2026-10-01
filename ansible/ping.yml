@@ -1,0 +1,16 @@
+---
+# Smoke test: can Ansible reach every Windows host over WinRM?
+- name: WinRM connectivity check
+  hosts: windows
+  gather_facts: false
+  tasks:
+    - name: Ping over WinRM
+      ansible.windows.win_ping:
+
+    - name: Show hostname / OS
+      ansible.windows.win_shell: hostname; (Get-CimInstance Win32_OperatingSystem).Caption
+      register: whoami
+
+    - name: Report
+      ansible.builtin.debug:
+        var: whoami.stdout_lines

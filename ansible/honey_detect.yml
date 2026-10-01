@@ -1,0 +1,70 @@
+---
+# Hunt honeypot hits on the DC. Run this AFTER you've attacked from Kali
+# (Kerberoast, password spray, BloodHound recon, etc.) to see what tripped.
+#
+#   ansible-playbook honey_detect.yml
+#   ansible-playbook honey_detect.yml -e hours=1     # look back 1h (default 24)
+#
+# It scans the DC Security log for events that reference any honey account and
+# prints a per-account summary. In a real deployment this query would live in
+# your SIEM as an alert rule — here it's a manual hunt so you can see the raw
+# evidence your attack generated.
+- name: Detect honeypot activity
+  hosts: dc
+  gather_facts: false
+  vars:
+    hours: 24
+  tasks:
+    - name: Build the list of honey account names
+      ansible.builtin.set_fact:
+        honey_names: "{{ honey_users | map(attribute='sam') | list }}"
+
+    - name: Scan the Security log for honeypot-related events
+      ansible.windows.win_shell: |
+        $names = @('{{ honey_names | join("','") }}')
+        $since = (Get-Date).AddHours(-{{ hours }})
+        $ids   = 4624,4625,4768,4769,4771,4662
+        # 4662 events reference the object by its GUID, not its name — resolve
+        # each honey account to a GUID so recon reads are matched too.
+        Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+        $guidToName = @{}
+        foreach ($n in $names) {
+          $u = Get-ADUser -Identity $n -Properties objectGUID -ErrorAction SilentlyContinue
+          if ($u) { $guidToName[$u.ObjectGUID.Guid] = $n }
+        }
+        $ev = Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=$ids; StartTime=$since } -ErrorAction SilentlyContinue
+        $hits = foreach ($e in $ev) {
+          $x = $e.Message
+          $matched = $null
+          if ($e.Id -eq 4662) {
+            foreach ($g in $guidToName.Keys) { if ($x -match $g) { $matched = $guidToName[$g]; break } }
+          } else {
+            foreach ($n in $names) { if ($x -match [regex]::Escape($n)) { $matched = $n; break } }
+          }
+          if ($matched) {
+              [pscustomobject]@{
+                Time    = $e.TimeCreated
+                EventId = $e.Id
+                Account = $matched
+                What    = switch ($e.Id) {
+                  4624 {'successful logon'}
+                  4625 {'FAILED logon'}
+                  4768 {'Kerberos TGT request (auth)'}
+                  4769 {'Kerberos service ticket (KERBEROAST?)'}
+                  4771 {'Kerberos pre-auth FAILED (spray?)'}
+                  4662 {'directory object READ (recon?)'}
+                }
+              }
+          }
+        }
+        if ($hits) {
+          $hits | Sort-Object Time |
+            Format-Table Time,EventId,Account,What -AutoSize | Out-String -Width 200
+          "`nTOTAL HITS: $($hits.Count)"
+        } else { "No honeypot activity in the last {{ hours }}h. (Attack from Kali, then re-run.)" }
+      register: hunt
+      changed_when: false
+
+    - name: Results
+      ansible.builtin.debug:
+        var: hunt.stdout_lines
