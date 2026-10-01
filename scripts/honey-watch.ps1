@@ -30,7 +30,11 @@ $secMap = @{
     4768='Kerberos TGT req'; 4769='Kerberos svc ticket'; 4771='Kerb preauth FAILED';
     4662='directory object READ'; 4720='user CREATED'; 4740='account LOCKED OUT'
 }
-$secIds = $secMap.Keys
+# NOTE: must be an explicit [int] array. Passing $secMap.Keys (a hashtable
+# KeyCollection) directly to Get-WinEvent -FilterHashtable Id=... silently
+# matches NOTHING, so the entire Security-log tail returns zero events and no
+# honeypot hit (4769 Kerberoast, 4625/4771 spray, 4662 recon) ever shows.
+$secIds = @($secMap.Keys | ForEach-Object { [int]$_ })
 
 function Test-Honey([string]$text) {
     foreach ($h in $Honey) { if ($text -match [regex]::Escape($h)) { return $h } }
